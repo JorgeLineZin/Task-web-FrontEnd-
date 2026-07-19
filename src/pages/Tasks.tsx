@@ -19,26 +19,39 @@ const FILTERS: { value: Filter; label: string }[] = [
 
 export function Tasks() {
   const [tasks, setTasks] = React.useState<Task[]>([])
+  // Começa como true (não via setState dentro do effect) porque já sabemos
+  // que vamos carregar os dados assim que o componente montar.
   const [loading, setLoading] = React.useState(true)
   const [filter, setFilter] = React.useState<Filter>("all")
 
-  const loadTasks = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await tasksApi.list()
-      setTasks(data)
-    } catch {
-      toast.error(
-        "Não foi possível carregar as tasks. Verifique se a API está no ar."
-      )
-    } finally {
-      setLoading(false)
+  // Busca de dados é um dos dois casos em que um Effect é realmente
+  // necessário (sincronizar com um sistema externo - a API). Para evitar
+  // o aviso de "setState síncrono dentro do effect", as atualizações de
+  // estado só acontecem dentro do callback assíncrono, depois do await -
+  // nunca como a primeira instrução síncrona do corpo do effect.
+  React.useEffect(() => {
+    let active = true
+
+    tasksApi
+      .list()
+      .then((data) => {
+        if (active) setTasks(data)
+      })
+      .catch(() => {
+        if (active) {
+          toast.error(
+            "Não foi possível carregar as tasks. Verifique se a API está no ar."
+          )
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
     }
   }, [])
-
-  React.useEffect(() => {
-    loadTasks()
-  }, [loadTasks])
 
   const handleCreate = async (values: { title: string; content: string }) => {
     const created = await tasksApi.create(values)
